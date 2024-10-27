@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2048 Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #b6ddf0dc;
+            position: relative;
+        }
+        .game-container {
+            width: 80vw;
+            max-width: 400px;
+            height: 80vw;
+            max-height: 400px;
+            border: 5px solid blue;  /* Blue bottom frame */
+            border-radius: 10px;
+            padding: 5%;
+            position: relative;
+            display: none; /* Initially hidden */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        .tile {
+            width: 20%;
+            height: 20%;
+            max-width: 90px;
+            max-height: 90px;
+            background-color: #daeeed;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            color: #776e65;
+            position: absolute;
+            transition: all 0.1s ease;
+        }
+        #start-screen, #game-over, #level-up-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(165, 230, 197, 0.9);
+            z-index: 10;
+            text-align: center;
+        }
+        #start-button, #restart-button, #continue-button {
+            background-color: #8f7a66;
+            color: rgba(214, 202, 153, 0.938);
+            border: none;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 1.2em;
+        }
+        #start-button:hover, #restart-button:hover, #continue-button:hover {
+            background-color: #7a6a54;
+        }
+        #timer {
+            font-size: 1.5em;
+            text-align: center;
+            margin-bottom: 10px;
+            color: black;
+            background-color: rgba(123, 128, 197, 0.8);
+            padding: 5px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(39, 38, 38, 0.3);
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+        }
+        .goal-frame {
+            border: 2px solid blue;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <audio id="background-music" loop>
+        <source src="http://music.163.com/song/media/outer/url?id=1451778670.mp3" type="audio/mp3">
+        Your browser does not support the audio element.
+    </audio>
+    <div id="timer">Time Remaining: 30 seconds</div>
+    <div id="start-screen">
+        <h1>p2204666</h1>
+        <h2>2048 Game</h2>
+        <div id="instructions">
+            <p>Game Rules:</p>
+            <p>Use the arrow keys (↑ ↓ ← →) to move the tiles and combine the same tiles.</p>
+            <p>The goal is to combine tiles to reach 2048!</p>
+            <p>Press "R" to restart the current level.</p>
+        </div>
+        <button id="start-button">Start Game</button>
+    </div>
+    <div class="game-container" id="game-container">
+        <!-- Game content will be generated here -->
+    </div>
+    <div id="game-over" style="display:none;">
+        <h2>Game Over!</h2>
+        <button id="restart-button">Return to Start Screen</button>
+    </div>
+    <div id="level-up-screen" style="display:none;">
+        <h2>Congratulations!</h2>
+        <p>You have reached the next level!</p>
+        <button id="continue-button">Continue Game</button>
+    </div>
+    
+    <div class="goal-frame" id="goal-frame" style="display:none;">
+        <h3>Level Goals:</h3>
+        <p>Easy: Reach 32</p>
+        <p>Difficult: Reach 64</p>
+        <p>Very Difficult: Reach 128</p>
+    </div>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over');
+        const levelUpScreen = document.getElementById('level-up-screen');
+        const goalFrame = document.getElementById('goal-frame');
+        let board;
+        let moveCount = 0;
+        let moved = false;
+        let gameStopped = false;
+        let gamePaused = false;
+        let currentLevel = 'Easy';
+        let timer;
+        let timeLeft;
+
+        const LEVEL_TIMES = {
+            'Easy': 30,
+            'Difficult': 45,
+            'Very Difficult': 60
+        };
+
+        function init() {
+            const music = document.getElementById('background-music');
+            music.play();  // Play background music
+            board = Array(4).fill().map(() => Array(4).fill(0));
+            addRandomTile();
+            addRandomTile();
+            timeLeft = LEVEL_TIMES[currentLevel]; // Set time based on current level
+            startTimer();
+            draw();
+            goalFrame.style.display = 'block'; // Show the goals frame
+        }
+
+        function startTimer() {
+            clearInterval(timer);
+            updateTimerDisplay();
+            timer = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const timerElement = document.getElementById('timer');
+            timerElement.textContent = `Time Remaining: ${timeLeft} seconds`;
+        }
+
+        function endGame() {
+            gameStopped = true;
+            clearInterval(timer);
+            gameOverScreen.style.display = 'flex';
+        }
+
+        function canMove() {
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    if (board[r][c] === 0) return true;
+                    if (c < 3 && board[r][c] === board[r][c + 1]) return true;
+                    if (r < 3 && board[r][c] === board[r + 1][c]) return true;
+                }
+            }
+            return false;
+        }
+
+        function draw() {
+            container.innerHTML = '';
+            board.forEach((row, r) => {
+                row.forEach((value, c) => {
+                    if (value) {
+                        const tile = document.createElement('div');
+                        tile.className = 'tile';
+                        tile.style.left = `${c * 100}px`;
+                        tile.style.top = `${r * 100}px`;
+                        tile.textContent = value;
+                        tile.style.backgroundColor = getTileColor(value);
+                        container.appendChild(tile);
+                    }
+                });
+            });
+            checkLevelUp();
+
+            if (!canMove() && !gameStopped) {
+                endGame();
+            }
+        }
+
+        function getTileColor(value) {
+            const colors = {
+                2: '#eee4da',
+                4: '#ede0c8',
+                8: '#f2b179',
+                16: '#f59563',
+                32: '#f67c5f',
+                64: '#f67c5f',
+                128: '#f9f386',
+                256: '#edcf72',
+                512: '#edcc61',
+                1024: '#edc850',
+                2048: '#edc53f'
+            };
+            return colors[value] || '#cdc1b4';
+        }
+
+        function addRandomTile() {
+            const emptyTiles = [];
+            board.forEach((row, r) => {
+                row.forEach((value, c) => {
+                    if (value === 0) {
+                        emptyTiles.push({ r, c });
+                    }
+                });
+            });
+            if (emptyTiles.length) {
+                const { r, c } = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+                if (currentLevel === 'Very Difficult') {
+                    const randomValue = [2, 4, 8][Math.floor(Math.random() * 3)];
+                    board[r][c] = randomValue; // Assign the random value
+                } else {
+                    board[r][c] = Math.random() < 0.9 ? 2 : 4; // Normal rules for other levels
+                }
+            }
+        }
+
+        function move(direction) {
+            if (gameStopped || gamePaused) return;
+
+            moved = false;
+            const originalBoard = JSON.parse(JSON.stringify(board));
+
+            for (let i = 0; i < 4; i++) {
+                let row = direction === 'left' || direction === 'right' ? board[i] : board.map(r => r[i]);
+                if (direction === 'right' || direction === 'down') row.reverse();
+
+                let newRow = [];
+                let skip = false;
+
+                for (let j = 0; j < 4; j++) {
+                    if (row[j] === 0) continue;
+
+                    if (skip) {
+                        skip = false;
+                        continue;
+                    }
+
+                    if (j < 3 && row[j] === row[j + 1]) {
+                        newRow.push(row[j] * 2);
+                        moved = true;
+                        skip = true;
+                    } else {
+                        newRow.push(row[j]);
+                    }
+                }
+
+                while (newRow.length < 4) newRow.push(0);
+                if (direction === 'right' || direction === 'down') newRow.reverse();
+
+                if (direction === 'left' || direction === 'right') {
+                    board[i] = newRow;
+                } else {
+                    for (let k = 0; k < 4; k++) {
+                        board[k][i] = newRow[k];
+                    }
+                }
+            }
+
+            const boardChanged = JSON.stringify(originalBoard) !== JSON.stringify(board);
+
+            if (boardChanged) {
+                moveCount++;
+                if (!moved) {
+                    addRandomTile();
+                } else if (moveCount % 2 === 0 || countTiles() === 1) {
+                    addRandomTile();
+                }
+            }
+
+            draw();
+        }
+
+        function countTiles() {
+            return board.flat().filter(value => value !== 0).length;
+        }
+
+        function checkLevelUp() {
+            const easyLevelValue = 32;
+            const difficultLevelValue = 64;
+            const veryDifficultLevelValue = 128;
+            const hasEasyLevelTile = board.flat().some(value => value >= easyLevelValue);
+            const hasDifficultLevelTile = board.flat().some(value => value >= difficultLevelValue);
+            const hasVeryDifficultLevelTile = board.flat().some(value => value >= veryDifficultLevelValue);
+
+            if (currentLevel === 'Easy' && hasEasyLevelTile) {
+                currentLevel = 'Difficult';
+                clearInterval(timer);
+                gamePaused = true;
+                levelUpScreen.querySelector('p').textContent = 'You have reached the next level (Difficult)!';
+                levelUpScreen.style.display = 'flex'; 
+            } else if (currentLevel === 'Difficult' && hasDifficultLevelTile) {
+                currentLevel = 'Very Difficult';
+                clearInterval(timer);
+                gamePaused = true;
+                levelUpScreen.querySelector('p').textContent = 'You have reached the next level (Very Difficult)!';
+                levelUpScreen.style.display = 'flex'; 
+            } else if (currentLevel === 'Very Difficult' && hasVeryDifficultLevelTile) {
+                endGame();
+            }
+        }
+
+        function startNextLevel() {
+            resetBoard();
+            timeLeft = LEVEL_TIMES[currentLevel]; // Reset time for the new level
+            startTimer();
+            levelUpScreen.style.display = 'none';
+            draw();
+        }
+
+        function resetBoard() {
+            board = Array(4).fill().map(() => Array(4).fill(0));
+            addRandomTile();
+            addRandomTile();
+        }
+
+        function returnToStart() {
+            clearInterval(timer);  // Stop the timer
+            gameStopped = false;
+            gamePaused = false;
+            moveCount = 0;
+            currentLevel = 'Easy';
+            container.style.display = 'none';
+            startScreen.style.display = 'flex';
+            gameOverScreen.style.display = 'none';
+            levelUpScreen.style.display = 'none';
+            goalFrame.style.display = 'none'; // Hide goals frame on return
+            updateTimerDisplay(); // Reset timer display to initial value
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!gameStopped && !gamePaused) {
+                if (e.key === 'ArrowUp') move('up');
+                else if (e.key === 'ArrowDown') move('down');
+                else if (e.key === 'ArrowLeft') move('left');
+                else if (e.key === 'ArrowRight') move('right');
+                else if (e.key === 'r' || e.key === 'R') returnToStart();
+            }
+        });
+
+        document.getElementById('start-button').addEventListener('click', () => {
+            startScreen.style.display = 'none';
+            container.style.display = 'block';
+            init();
+        });
+
+        document.getElementById('restart-button').addEventListener('click', returnToStart);
+        document.getElementById('continue-button').addEventListener('click', () => {
+            gamePaused = false;
+            startNextLevel();
+        });
+    </script>
+</body>
+</html>
